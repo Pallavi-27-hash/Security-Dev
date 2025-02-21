@@ -48,7 +48,7 @@ This guide details the steps to update, upgrade, and secure your Ubuntu system b
 ---
 
 ## Table of Contents
-
+- [Step 1: Update & Upgrade System](#step-1-update--upgrade-system)
 - [Step 2: Install Core Utilities & Dependencies](#step-2-install-core-utilities--dependencies)
 - [Step 3: Install Docker & Docker Compose](#step-3-install-docker--docker-compose)
 - [Step 4: Install Falco (Behavioral Threat Detection)](#step-4-install-falco-behavioral-threat-detection)
@@ -62,9 +62,7 @@ This guide details the steps to update, upgrade, and secure your Ubuntu system b
 ---
 
 ## Step 1: Update & Upgrade System
-
-First, update your system’s package list and upgrade any default packages:
-
+#### First, update your system’s package list and upgrade any default packages:
 
 ```sh
 sudo apt update && sudo apt upgrade -y
@@ -208,17 +206,19 @@ sudo apt update
 sudo apt install -y elasticsearch
 sudo systemctl enable elasticsearch
 sudo systemctl start elasticsearch
-Grafana (Dashboard for visualization):
-Add the Grafana APT Repository:
+
+
 ```
+## Grafana (Dashboard for visualization):
+#### Add the Grafana APT Repository:
 ```sh
 sudo mkdir -p /etc/apt/keyrings/
 wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/grafana.gpg > /dev/null
 echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | sudo tee /etc/apt/sources.list.d/grafana.list
 sudo apt update
-Install and start Grafana:
-```
 
+```
+## Install and start Grafana:
 ```sh
 sudo apt install -y grafana
 sudo systemctl start grafana-server
