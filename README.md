@@ -137,6 +137,115 @@ curl -fsSL https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo tee /
 echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/trivy.list
 sudo apt update && sudo apt install -y trivy
 ```
+## Jenkins Pipeline: Automated Container Security and Auto-Remediation
+
+#### This Jenkins pipeline automates the security validation and remediation process for our containerized Java application
+```sh
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "my-java-app"
+        IMAGE_TAG = "latest"
+        CONTAINER_PORT = "8082"
+        CVE_THRESHOLD = "CRITICAL"
+    }
+
+    stages {
+        stage('Check Image Locally') {
+            steps {
+                script {
+                    def imageExists = sh(
+                        script: "docker images -q ${IMAGE_NAME}:${IMAGE_TAG}", 
+                        returnStdout: true
+                    ).trim()
+                    if (!imageExists) {
+                        error "Image ${IMAGE_NAME}:${IMAGE_TAG} not found locally!"
+                    }
+                    echo "✅ Image exists locally, skipping pull."
+                }
+            }
+        }
+
+        stage('Run Trivy Scan') {
+            steps {
+                script {
+                    def scanOutput = sh(
+                        script: "trivy image --format json ${IMAGE_NAME}:${IMAGE_TAG}", 
+                        returnStdout: true
+                    ).trim()
+                    writeFile file: 'trivy-results.json', text: scanOutput
+                }
+            }
+        }
+
+        stage('Check for Critical CVEs') {
+            steps {
+                script {
+                    def cveCount = sh(
+                        script: "jq '[.Results[].Vulnerabilities[]? | select(.Severity == \"${CVE_THRESHOLD}\")] | length' trivy-results.json", 
+                        returnStdout: true
+                    ).trim()
+                    if (cveCount.toInteger() > 0) {
+                        echo "⚠️ Found ${cveCount} CRITICAL vulnerabilities! Initiating auto-remediation..."
+                        currentBuild.result = 'UNSTABLE'
+                    } else {
+                        echo "✅ No CRITICAL vulnerabilities found. Proceeding normally."
+                    }
+                }
+            }
+        }
+
+        stage('Auto-Remediate (Restart Container)') {
+            when {
+                expression { currentBuild.result == 'UNSTABLE' }
+            }
+            steps {
+                script {
+                    echo "⚠️ Restarting container due to critical vulnerabilities..."
+
+                    // Cleanup container before restarting
+                    sh """
+                        CONTAINER_ID=\$(docker ps -q --filter "name=${IMAGE_NAME}")
+                        if [ ! -z "\$CONTAINER_ID" ]; then
+                            echo "Stopping and removing existing container with ID: \$CONTAINER_ID"
+                            docker stop \$CONTAINER_ID
+                            docker rm \$CONTAINER_ID
+                        fi
+                        docker run -d --name ${IMAGE_NAME} -p ${CONTAINER_PORT}:8080 ${IMAGE_NAME}:${IMAGE_TAG}
+                    """
+                }
+            }
+        }
+
+        stage('Verify Fix') {
+            when {
+                expression { currentBuild.result == 'UNSTABLE' }
+            }
+            steps {
+                script {
+                    def reScanOutput = sh(
+                        script: "trivy image --format json ${IMAGE_NAME}:${IMAGE_TAG}", 
+                        returnStdout: true
+                    ).trim()
+                    writeFile file: 'trivy-results-after.json', text: reScanOutput
+
+                    def reCveCount = sh(
+                        script: "jq '[.Results[].Vulnerabilities[]? | select(.Severity == \"${CVE_THRESHOLD}\")] | length' trivy-results-after.json", 
+                        returnStdout: true
+                    ).trim()
+
+                    if (reCveCount.toInteger() == 0) {
+                        echo "✅ Fix Verified! No CRITICAL vulnerabilities found in the new container."
+                    } else {
+                        echo "⚠️ WARNING: ${reCveCount} CRITICAL vulnerabilities still exist. Manual intervention required!"
+                    }
+                }
+            }
+        }
+    }
+}
+```
 ## Step 6: Install Sigstore (Cosign for Image Signing)
 #### Sigstore ensures your container images are securely signed and verified:
 
@@ -224,3 +333,4 @@ sudo apt install -y grafana
 sudo systemctl start grafana-server
 sudo systemctl enable --now grafana
 ```
+
